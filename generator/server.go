@@ -180,7 +180,9 @@ func (g *generator) genMarshalServerResponse(source string) {
 	case libraryFastHTTP:
 		g.gf.P("	_, _ = fastctx.Write(respJson)")
 	case libraryNetHTTP:
-		g.gf.P("	_, _ = w.Write(respJson)")
+		g.gf.P("	if respJson != nil {")
+		g.gf.P("		_, _ = w.Write(respJson)")
+		g.gf.P("	}")
 	case libraryGin:
 		g.gf.P("	ginctx.Data(ginctx.Writer.Status(), \"application/json\", respJson)")
 	}
