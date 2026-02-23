@@ -133,6 +133,9 @@ func (g *generator) genMethodDeclaration(serviceName string, method methodParams
 	g.gf.P("	} else {")
 	g.gf.P("		resp, _ = middleware(ctx, input, handler)")
 	g.gf.P("	}")
+	g.gf.P("	if resp == nil {")
+	g.gf.P("		return")
+	g.gf.P("	}")
 	if method.rule != nil && method.rule.ResponseBody != "" {
 		respField, ok := method.outputFields[method.rule.ResponseBody]
 		if !ok {
