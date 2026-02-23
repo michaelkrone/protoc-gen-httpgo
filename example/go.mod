@@ -1,4 +1,4 @@
-module github.com/MUlt1mate/protoc-gen-httpgo/example
+module github.com/michaelkrone/protoc-gen-httpgo/example
 
 go 1.23.0
 

@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package main;
-option go_package = "github.com/MUlt1mate/protoc-gen-httpgo/benchmark/proto;proto";
+option go_package = "github.com/michaelkrone/protoc-gen-httpgo/benchmark/proto;proto";
 
 import "google/api/annotations.proto";
 

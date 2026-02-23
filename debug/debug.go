@@ -8,7 +8,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/generator"
+	"github.com/michaelkrone/protoc-gen-httpgo/generator"
 )
 
 func main() {

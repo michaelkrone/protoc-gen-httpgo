@@ -7,15 +7,16 @@ import (
 	context "context"
 	json "encoding/json"
 	fmt "fmt"
-	common "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/common"
-	router "github.com/fasthttp/router"
-	fasthttp "github.com/valyala/fasthttp"
-	anypb "google.golang.org/protobuf/types/known/anypb"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	multipart "mime/multipart"
 	url "net/url"
 	strconv "strconv"
 	strings "strings"
+
+	router "github.com/fasthttp/router"
+	common "github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
+	fasthttp "github.com/valyala/fasthttp"
+	anypb "google.golang.org/protobuf/types/known/anypb"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 type ServiceNameHTTPGoService interface {

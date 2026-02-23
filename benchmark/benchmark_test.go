@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/benchmark/proto"
+	"github.com/michaelkrone/protoc-gen-httpgo/benchmark/proto"
 )
 
 // Benchmark for the HTTP handler

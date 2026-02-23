@@ -37,7 +37,7 @@ gen:				## generate example
 
 installdeps:
 	@go install golang.org/x/perf/cmd/benchstat@latest
-	@go install github.com/MUlt1mate/protoc-gen-httpgo@latest
+	@go install github.com/michaelkrone/protoc-gen-httpgo@latest
 	@go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.5
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 	@go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.26.1

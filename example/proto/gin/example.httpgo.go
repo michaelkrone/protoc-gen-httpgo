@@ -5,13 +5,14 @@ package proto
 import (
 	context "context"
 	fmt "fmt"
-	common "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/common"
-	gin "github.com/gin-gonic/gin"
-	anypb "google.golang.org/protobuf/types/known/anypb"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	multipart "mime/multipart"
 	strconv "strconv"
 	strings "strings"
+
+	gin "github.com/gin-gonic/gin"
+	common "github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
+	anypb "google.golang.org/protobuf/types/known/anypb"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 type ServiceNameHTTPGoService interface {

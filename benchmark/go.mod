@@ -1,4 +1,4 @@
-module github.com/MUlt1mate/protoc-gen-httpgo/benchmark
+module github.com/michaelkrone/protoc-gen-httpgo/benchmark
 
 go 1.25
 

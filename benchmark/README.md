@@ -22,7 +22,7 @@ This package contains benchmark test cases that allow to compare speed and memor
 #### Results
 
 |                   | httpgo       | grpc-gateway |
-|-------------------|--------------|--------------|
+| ----------------- | ------------ | ------------ |
 | Time all          | 1.026s       | 2.271s       |
 | Time/op           | 203982 ns/op | 453008 ns/op |
 | Memory allocation | 3.5 MB       | 91.5 MB      |
@@ -32,7 +32,7 @@ This package contains benchmark test cases that allow to compare speed and memor
 ```text
 goos: linux
 goarch: amd64
-pkg: github.com/MUlt1mate/protoc-gen-httpgo/benchmark
+pkg: github.com/michaelkrone/protoc-gen-httpgo/benchmark
 cpu: Intel(R) Core(TM) i5-9300H CPU @ 2.40GHz
                 │ bench_grpcgateway.txt │          bench_httpgo.txt           │
                 │        sec/op         │   sec/op     vs base                │
@@ -47,4 +47,3 @@ grpc-gateway acts as a proxy that marshals/unmarshals every request twice (JSON 
 over local network sockets.  
 httpgo generates direct handlers, eliminating the proxy layer and reducing heap allocations
 significantly.
-

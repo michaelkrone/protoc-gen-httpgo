@@ -5,6 +5,6 @@
 // protoc -I=. --httpgo_out=paths=source_relative:. example/proto/example.proto
 //
 // For using reference check README file
-// https://github.com/MUlt1mate/protoc-gen-httpgo/blob/main/README.md
+// https://github.com/michaelkrone/protoc-gen-httpgo/blob/main/README.md
 // For development reference check generator package
 package main

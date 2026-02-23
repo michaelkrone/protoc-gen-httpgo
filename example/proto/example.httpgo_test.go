@@ -19,14 +19,14 @@ import (
 	"github.com/valyala/fasthttp"
 	pb "google.golang.org/protobuf/proto"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/example/implementation"
-	fasthttpmdlwr "github.com/MUlt1mate/protoc-gen-httpgo/example/implementation/fasthttp"
-	ginmdlwr "github.com/MUlt1mate/protoc-gen-httpgo/example/implementation/gin"
-	nethttpmdlwr "github.com/MUlt1mate/protoc-gen-httpgo/example/implementation/nethttp"
-	"github.com/MUlt1mate/protoc-gen-httpgo/example/proto/common"
-	fastproto "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/fasthttp"
-	ginproto "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/gin"
-	httpproto "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/nethttp"
+	"github.com/michaelkrone/protoc-gen-httpgo/example/implementation"
+	fasthttpmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/fasthttp"
+	ginmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/gin"
+	nethttpmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/nethttp"
+	"github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
+	fastproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/fasthttp"
+	ginproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/gin"
+	httpproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/nethttp"
 )
 
 type testCaseClient struct {

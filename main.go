@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/types/pluginpb"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/generator"
+	"github.com/michaelkrone/protoc-gen-httpgo/generator"
 )
 
 var flags flag.FlagSet

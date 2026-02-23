@@ -1,6 +1,6 @@
 goos: linux
 goarch: amd64
-pkg: github.com/MUlt1mate/protoc-gen-httpgo/benchmark
+pkg: github.com/michaelkrone/protoc-gen-httpgo/benchmark
 cpu: Intel(R) Core(TM) i5-9300H CPU @ 2.40GHz
                 │ bench_grpcgateway.txt │          bench_httpgo.txt           │
                 │        sec/op         │   sec/op     vs base                │

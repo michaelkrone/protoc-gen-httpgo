@@ -11,8 +11,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	proto "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/common"
-	protofasthttp "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/fasthttp"
+	proto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
+	protofasthttp "github.com/michaelkrone/protoc-gen-httpgo/example/proto/fasthttp"
 )
 
 type Handler struct {

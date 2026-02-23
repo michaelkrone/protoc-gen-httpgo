@@ -1,8 +1,8 @@
 # protoc-gen-httpgo
 
-![workflow](https://github.com/MUlt1mate/protoc-gen-httpgo/actions/workflows/go.yml/badge.svg)
-![go-report](https://goreportcard.com/badge/github.com/MUlt1mate/protoc-gen-httpgo)
-[![Go Reference](https://pkg.go.dev/badge/github.com/MUlt1mate/protoc-gen-httpgo.svg)](https://pkg.go.dev/github.com/MUlt1mate/protoc-gen-httpgo)
+![workflow](https://github.com/michaelkrone/protoc-gen-httpgo/actions/workflows/go.yml/badge.svg)
+![go-report](https://goreportcard.com/badge/github.com/michaelkrone/protoc-gen-httpgo)
+[![Go Reference](https://pkg.go.dev/badge/github.com/michaelkrone/protoc-gen-httpgo.svg)](https://pkg.go.dev/github.com/michaelkrone/protoc-gen-httpgo)
 
 **httpgo** is a protoc plugin that generates native HTTP server and client code from your proto files.  
 It is a lightweight, high-performance alternative to [grpc-gateway](https://github.com/grpc-ecosystem/grpc-gateway).
@@ -23,17 +23,17 @@ Check [benchmark](./benchmark/README.md)
 ## Features
 
 - Generation of both server and client code
-    - Supports [gin](https://github.com/gin-gonic/gin) (server only)
-    - Supports [fasthttp](https://github.com/valyala/fasthttp)
-    - Supports [net/http](https://pkg.go.dev/net/http)
+  - Supports [gin](https://github.com/gin-gonic/gin) (server only)
+  - Supports [fasthttp](https://github.com/valyala/fasthttp)
+  - Supports [net/http](https://pkg.go.dev/net/http)
 - Provides multiple options for Marshaling/Unmarshaling:
-    - Uses the native `encoding/json` by default
-    - Optional usage of [protojson](https://pkg.go.dev/google.golang.org/protobuf/encoding/protojson) for better
-      protocol buffer support
+  - Uses the native `encoding/json` by default
+  - Optional usage of [protojson](https://pkg.go.dev/google.golang.org/protobuf/encoding/protojson) for better
+    protocol buffer support
 - Uses standard
   [google.api.http](https://cloud.google.com/service-infrastructure/docs/service-management/reference/rpc/google.api#httprule)
   definitions for path mapping
-    - supports all HttpRule fields
+  - supports all HttpRule fields
 - Supports automatic URI generation
 - Supports a wide range of data types in path parameters
 - Supports middlewares
@@ -45,8 +45,8 @@ Check [benchmark](./benchmark/README.md)
 ### Installation
 
 ```bash
- go install github.com/MUlt1mate/protoc-gen-httpgo@latest
- ```
+ go install github.com/michaelkrone/protoc-gen-httpgo@latest
+```
 
 ### Definition
 
@@ -71,14 +71,14 @@ message TestMessage {
 
 ### Generation
 
-```bash  
+```bash
 protoc -I=. --httpgo_out=paths=source_relative:. example/proto/example.proto
-```  
+```
 
 #### Parameters
 
 | Name            | Values                  | Description                                                                                                      |
-|-----------------|-------------------------|------------------------------------------------------------------------------------------------------------------|
+| --------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | paths           | source_relative, import | Inherited from protogen, see [docs](https://protobuf.dev/reference/go/go-generated/#invocation) for more details |
 | marshaller      | json, protojson         | Specifies the data marshaling/unmarshaling package. Uses `encoding/json` by default.                             |
 | only            | server, client          | Use to generate either the server or client code exclusively                                                     |
@@ -108,8 +108,8 @@ package main
 import (
 	"context"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/example/implementation"
-	"github.com/MUlt1mate/protoc-gen-httpgo/example/proto"
+	"github.com/michaelkrone/protoc-gen-httpgo/example/implementation"
+	"github.com/michaelkrone/protoc-gen-httpgo/example/proto"
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 )
@@ -136,7 +136,7 @@ package main
 import (
 	"context"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/example/proto"
+	"github.com/michaelkrone/protoc-gen-httpgo/example/proto"
 	"github.com/valyala/fasthttp"
 )
 
@@ -161,7 +161,7 @@ func clientExample(ctx context.Context) (err error) {
 You can define custom middlewares with specific arguments and return values.  
 Pass a slice of middlewares to the constructor, and they will be invoked in the specified order.  
 There
-are [middleware examples](https://github.com/MUlt1mate/protoc-gen-httpgo/blob/main/example/implementation/fasthttp/middlewares.go)
+are [middleware examples](https://github.com/michaelkrone/protoc-gen-httpgo/blob/main/example/implementation/fasthttp/middlewares.go)
 for logs, timeout, headers, etc.
 
 ```go
@@ -204,7 +204,7 @@ func LoggerClientMiddleware(
 
 ```
 
-See [example](https://github.com/MUlt1mate/protoc-gen-httpgo/tree/main/example) for more details.
+See [example](https://github.com/michaelkrone/protoc-gen-httpgo/tree/main/example) for more details.
 
 #### Conventions
 
@@ -234,8 +234,8 @@ type InputMsgName struct {
 We defined **v**alue and got **V**alue. This works just fine, but keep in mind that server will only check for arguments
 with proto names.
 
-* /v1/test?value=1 - correct
-* /v1/test?Value=1 - incorrect
+- /v1/test?value=1 - correct
+- /v1/test?Value=1 - incorrect
 
 #### Files
 

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 
-	"github.com/MUlt1mate/protoc-gen-httpgo/benchmark/proto"
+	"github.com/michaelkrone/protoc-gen-httpgo/benchmark/proto"
 )
 
 type Handler struct {

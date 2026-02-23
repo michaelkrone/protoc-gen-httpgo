@@ -1,4 +1,4 @@
-module github.com/MUlt1mate/protoc-gen-httpgo
+module github.com/michaelkrone/protoc-gen-httpgo
 
 go 1.22
 

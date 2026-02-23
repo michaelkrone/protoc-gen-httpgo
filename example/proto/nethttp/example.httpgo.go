@@ -8,15 +8,16 @@ import (
 	json "encoding/json"
 	errors "errors"
 	fmt "fmt"
-	common "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/common"
-	anypb "google.golang.org/protobuf/types/known/anypb"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	io "io"
 	multipart "mime/multipart"
 	http "net/http"
 	url "net/url"
 	strconv "strconv"
 	strings "strings"
+
+	common "github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
+	anypb "google.golang.org/protobuf/types/known/anypb"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 type ServiceNameHTTPGoService interface {

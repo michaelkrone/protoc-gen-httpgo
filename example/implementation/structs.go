@@ -3,7 +3,7 @@ package implementation
 import (
 	"math"
 
-	proto "github.com/MUlt1mate/protoc-gen-httpgo/example/proto/common"
+	proto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
 )
 
 var (
