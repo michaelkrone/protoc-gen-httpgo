@@ -17,9 +17,6 @@ const (
 	onlyServer               = "server"
 	onlyClient               = "client"
 	pathRepeatedArgDelimiter = ","
-	libraryNetHTTP           = "nethttp"
-	libraryFastHTTP          = "fasthttp"
-	libraryGin               = "gin"
 	contentTypeJSONApp       = "application/json"
 	contentTypeMultipart     = "multipart/form-data"
 )

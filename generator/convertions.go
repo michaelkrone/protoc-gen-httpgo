@@ -80,7 +80,8 @@ func (g *generator) genNumericFieldConvertor(
 		return fmt.Errorf("unexpected type %s for numeric field ", f.kind)
 	}
 	g.gf.P("if ", errorVar, " != nil {")
-	errValues := []any{fmtPackage.Ident("Errorf"), "(\"conversion failed for parameter ", f.protoName, ": %w\", ", errorVar, ")"}
+	g.gf.P("errMsg := ", stringsPackage.Ident("SplitN"), "(", errorVar, ".Error(), ", `": ", 2)`)
+	errValues := []any{fmtPackage.Ident("Errorf"), "(\"conversion failed for parameter ", f.protoName, ": %s\", errMsg[1])"}
 	if nakedReturn {
 		g.gf.P(append([]any{"	err = "}, errValues...)...)
 		g.gf.P("	return")
