@@ -20,12 +20,9 @@ import (
 	pb "google.golang.org/protobuf/proto"
 
 	"github.com/michaelkrone/protoc-gen-httpgo/example/implementation"
-	fasthttpmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/fasthttp"
-	ginmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/gin"
 	nethttpmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/nethttp"
 	"github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
-	fastproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/fasthttp"
-	ginproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/gin"
+
 	httpproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/nethttp"
 )
 
@@ -70,19 +67,10 @@ func TestHTTPGoClient(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(getMockServer(reqCh, respCh)))
 	defer mockServer.Close()
 	var (
-		clientfastHTTP fastproto.ServiceNameHTTPGoService
-		clientNetHTTP  fastproto.ServiceNameHTTPGoService
-		err            error
-		ctx            = context.Background()
+		clientNetHTTP httpproto.ServiceNameHTTPGoService
+		err           error
+		ctx           = context.Background()
 	)
-	if clientfastHTTP, err = fastproto.GetServiceNameHTTPGoClient(
-		ctx,
-		&fasthttp.Client{},
-		mockServer.URL,
-		fasthttpmdlwr.ClientMiddlewares,
-	); err != nil {
-		t.Fatal(err)
-	}
 	if clientNetHTTP, err = httpproto.GetServiceNameHTTPGoClient(
 		ctx,
 		&http.Client{},
@@ -91,9 +79,8 @@ func TestHTTPGoClient(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	var clients = map[string]fastproto.ServiceNameHTTPGoService{
-		"fasthttp": clientfastHTTP,
-		"nethttp":  clientNetHTTP,
+	var clients = map[string]httpproto.ServiceNameHTTPGoService{
+		"nethttp": clientNetHTTP,
 	}
 
 	for clientName, client := range clients {
@@ -321,13 +308,7 @@ func TestHTTPGoServer(t *testing.T) {
 		fasthttpRouter                                    = router.New()
 		ginRouter                                         = gin.New()
 	)
-	if err = fastproto.RegisterServiceNameHTTPGoServer(ctx, fasthttpRouter, handler, fasthttpmdlwr.ServerMiddlewares); err != nil {
-		t.Fatal(err)
-	}
 	if err = httpproto.RegisterServiceNameHTTPGoServer(ctx, rHttp, handler, nethttpmdlwr.ServerMiddlewares); err != nil {
-		t.Fatal(err)
-	}
-	if err = ginproto.RegisterServiceNameHTTPGoServer(ctx, ginRouter, handler, ginmdlwr.ServerMiddlewares); err != nil {
 		t.Fatal(err)
 	}
 
@@ -439,9 +420,7 @@ func TestHTTPGoServer(t *testing.T) {
 		req         *http.Request
 		cancel      context.CancelFunc
 		serverHosts = map[string]string{
-			"fasthttp": ln.Addr().String(),
-			"nethttp":  lnHttp.Addr().String(),
-			"gin":      ginAddr,
+			"nethttp": lnHttp.Addr().String(),
 		}
 	)
 

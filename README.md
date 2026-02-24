@@ -23,8 +23,6 @@ Check [benchmark](./benchmark/README.md)
 ## Features
 
 - Generation of both server and client code
-  - Supports [gin](https://github.com/gin-gonic/gin) (server only)
-  - Supports [fasthttp](https://github.com/valyala/fasthttp)
   - Supports [net/http](https://pkg.go.dev/net/http)
 - Provides multiple options for Marshaling/Unmarshaling:
   - Uses the native `encoding/json` by default

@@ -7,32 +7,22 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fasthttp/router"
-	"github.com/gin-gonic/gin"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/valyala/fasthttp"
 
 	"github.com/michaelkrone/protoc-gen-httpgo/example/implementation"
-	fasthttpmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/fasthttp"
-	ginmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/gin"
 	nethttpmdlwr "github.com/michaelkrone/protoc-gen-httpgo/example/implementation/nethttp"
 	"github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
-	fastproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/fasthttp"
-	ginproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/gin"
+
 	httpproto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/nethttp"
 )
 
 const (
-	fasthttpAddr = "localhost:8080"
-	nethttpAddr  = "localhost:8081"
-	ginAddr      = "localhost:8082"
+	nethttpAddr = "localhost:8081"
 )
 
 var (
-	fastClient          httpproto.ServiceNameHTTPGoService
-	nethttpClient       httpproto.ServiceNameHTTPGoService
-	nethttpClientForGin httpproto.ServiceNameHTTPGoService
+	nethttpClient httpproto.ServiceNameHTTPGoService
 )
 
 func main() {
@@ -49,14 +39,7 @@ func main() {
 	}
 
 	time.Sleep(time.Millisecond * 100)
-
-	if err = clientRunRequests(ctx, fastClient); err != nil {
-		log.Println(err)
-	}
 	if err = clientRunRequests(ctx, nethttpClient); err != nil {
-		log.Println(err)
-	}
-	if err = clientRunRequests(ctx, nethttpClientForGin); err != nil {
 		log.Println(err)
 	}
 
@@ -65,40 +48,16 @@ func main() {
 }
 
 func serverInit(ctx context.Context) (err error) {
-	gin.SetMode(gin.ReleaseMode)
 	var (
-		handler        fastproto.ServiceNameHTTPGoService = &implementation.Handler{}
-		fasthttpRouter                                    = router.New()
-		rHttp                                             = http.NewServeMux()
-		ginRouter                                         = gin.New()
+		handler httpproto.ServiceNameHTTPGoService = &implementation.Handler{}
+		rHttp                                      = http.NewServeMux()
 	)
-	if err = fastproto.RegisterServiceNameHTTPGoServer(ctx, fasthttpRouter, handler, fasthttpmdlwr.ServerMiddlewares); err != nil {
-		return err
-	}
-	if err = httpproto.RegisterServiceNameHTTPGoServer(ctx, rHttp, handler, nethttpmdlwr.ServerMiddlewares); err != nil {
-		return err
-	}
-	/*
-		Gin has its own middleware format, but with this one you can have transport independent handler
-		with context.Context that can be populated with the same keys in both HTTP and GRPC middlewares.
-		And of course if you have only HTTP you can use gin middleware format and pass nil to httpgo middlewares
-	*/
-	if err = ginproto.RegisterServiceNameHTTPGoServer(ctx, ginRouter, handler, ginmdlwr.ServerMiddlewares); err != nil {
+	if err = httpproto.RegisterServiceNameHTTPGoServer(ctx, rHttp, handler, nil); err != nil {
 		return err
 	}
 
 	go func() {
-		if err = fasthttp.ListenAndServe(fasthttpAddr, fasthttpRouter.Handler); err != nil {
-			log.Fatal(err)
-		}
-	}()
-	go func() {
 		if err = http.ListenAndServe(nethttpAddr, rHttp); err != nil {
-			log.Fatal(err)
-		}
-	}()
-	go func() {
-		if err = ginRouter.Run(ginAddr); err != nil {
 			log.Fatal(err)
 		}
 	}()
@@ -106,16 +65,6 @@ func serverInit(ctx context.Context) (err error) {
 }
 
 func clientInit(ctx context.Context) (err error) {
-	var fasthttpClientTransport = &fasthttp.Client{}
-	if fastClient, err = fastproto.GetServiceNameHTTPGoClient(
-		ctx,
-		fasthttpClientTransport,
-		"http://"+fasthttpAddr,
-		fasthttpmdlwr.ClientMiddlewares,
-	); err != nil {
-		return err
-	}
-
 	var httpClientTransport = &http.Client{}
 	if nethttpClient, err = httpproto.GetServiceNameHTTPGoClient(
 		ctx,
@@ -126,15 +75,6 @@ func clientInit(ctx context.Context) (err error) {
 		return err
 	}
 
-	// we use other client to check gin server
-	if nethttpClientForGin, err = httpproto.GetServiceNameHTTPGoClient(
-		ctx,
-		httpClientTransport,
-		"http://"+ginAddr,
-		nethttpmdlwr.ClientMiddlewares,
-	); err != nil {
-		return err
-	}
 	return nil
 }
 

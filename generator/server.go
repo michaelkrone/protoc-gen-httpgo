@@ -14,6 +14,10 @@ func (g *generator) GenerateServers(file *protogen.File) (err error) {
 	g.gf.P("// source: ", file.Desc.Path())
 	g.gf.P()
 	g.gf.P("package ", file.GoPackageName)
+	g.gf.P()
+	g.gf.P("type HandlerFunc = func(", g.serverInput, ") (", g.serverOutput, ")")
+	g.gf.P("type MiddlewareFunc = func(", g.serverInput, ", handler HandlerFunc) (", g.serverOutput, ")")
+	g.gf.P()
 
 	for _, service := range g.services {
 		g.genServiceInterface(service)
@@ -29,6 +33,7 @@ func (g *generator) GenerateServers(file *protogen.File) (err error) {
 	}
 
 	g.genChainServerMiddlewares()
+	g.genServerStream()
 	return nil
 }
 
@@ -36,10 +41,17 @@ func (g *generator) GenerateServers(file *protogen.File) (err error) {
 func (g *generator) genServiceInterface(service serviceParams) {
 	g.gf.P("type ", service.name, "HTTPGoService interface {")
 	for _, method := range service.methods {
-		g.gf.P(
-			"	", method.name, "(", contextPackage.Ident("Context"), ", *", method.inputMsgName, ") ",
-			"(*", method.outputMsgName, ", error)",
-		)
+		if method.streaming {
+			g.gf.P(
+				"	", method.name, "(*", method.inputMsgName, ", ",
+				grpcPackage.Ident("ServerStreamingServer"), "[", method.outputMsgName, "]) error",
+			)
+		} else {
+			g.gf.P(
+				"	", method.name, "(", contextPackage.Ident("Context"), ", *", method.inputMsgName, ") ",
+				"(*", method.outputMsgName, ", error)",
+			)
+		}
 	}
 	g.gf.P("}")
 }
@@ -48,16 +60,9 @@ func (g *generator) genServiceInterface(service serviceParams) {
 func (g *generator) genServiceServer(service serviceParams) (err error) {
 	g.gf.P("func Register", service.name, "HTTPGoServer(")
 	g.gf.P("	_ ", contextPackage.Ident("Context"), ",")
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	r *", g.lib.Ident("ServeMux"), ",")
-	case libraryFastHTTP:
-		g.gf.P("	r *", routerPackage.Ident("Router"), ",")
-	case libraryGin:
-		g.gf.P("	r *", ginPackage.Ident("Engine"), ",")
-	}
+	g.gf.P("	r *", g.lib.Ident("ServeMux"), ",")
 	g.gf.P("	h ", service.name, "HTTPGoService,")
-	g.gf.P("	middlewares []func(", g.serverInput, ", handler func(", g.serverInput, ") (", g.serverOutput, ")) (", g.serverOutput, "),")
+	g.gf.P("	middlewares []MiddlewareFunc,")
 	g.gf.P(") error {")
 	g.gf.P("	var middleware = chainServerMiddlewares", g.filename, "(middlewares)")
 	for _, method := range service.methods {
@@ -81,73 +86,67 @@ func (g *generator) genServiceServer(service serviceParams) (err error) {
 // genMethodDeclaration generates binding route with handler
 func (g *generator) genMethodDeclaration(serviceName string, method methodParams) (err error) {
 	g.gf.P(method.comment)
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("r.HandleFunc( \"", method.httpMethodName, " ", method.uri.protoURI, "\", func(w ", g.lib.Ident("ResponseWriter"), ", r *", g.lib.Ident("Request"), ") { ")
+
+	g.gf.P("r.HandleFunc( \"", method.httpMethodName, " ", method.uri.protoURI, "\", func(w ", g.lib.Ident("ResponseWriter"), ", r *", g.lib.Ident("Request"), ") { ")
+	if !method.streaming {
 		g.gf.P("	w.Header().Set(\"Content-Type\", \"application/json\")")
-		g.gf.P("	input, err := build", g.getBuildMethodInputName(serviceName, method), "(r)")
+	}
+	g.gf.P("	input, err := build", g.getBuildMethodInputName(serviceName, method), "(r)")
+	g.gf.P("	if err != nil {")
+	g.gf.P("		w.Header().Set(\"Content-Type\", \"application/json\")")
+	g.gf.P("		w.WriteHeader(", g.lib.Ident("StatusBadRequest"), ")")
+	// can't use protojson on inline structure
+	g.gf.P("		respJson, _ := ", jsonPackage.Ident("Marshal"), "(struct{ Error string }{Error: err.Error()})")
+	g.gf.P("		_, _ = w.Write(respJson)")
+	g.gf.P("		return")
+	g.gf.P("	}")
+	g.gf.P("	ctx := r.Context()")
+	g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"http_writer\", w)")
+	g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"http_request\", r)")
+	g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"proto_service\", \""+serviceName+"\")")
+	g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"proto_method\", \""+method.name+"\")")
+	if method.streaming {
+		g.gf.P("	handler := func(", g.serverInput, ") error {")
+		g.gf.P("		stream := NewHTTPServerStream[", method.outputMsgName, "](w, r)")
+		g.gf.P("		return h.", method.name, "(input, stream)")
+		g.gf.P("	}")
+		g.gf.P("	err = handler(ctx, input)")
 		g.gf.P("	if err != nil {")
+		g.gf.P(`		w.Header().Set("Content-Type", "application/json")`)
 		g.gf.P("		w.WriteHeader(", g.lib.Ident("StatusBadRequest"), ")")
-		// can't use protojson on inline structure
-		g.gf.P("		respJson, _ := ", jsonPackage.Ident("Marshal"), "(struct{ Error string }{Error: err.Error()})")
+		g.gf.P("		respJson, _ := ", jsonPackage.Ident("Marshal"), "(struct{ Error error }{Error: err})")
 		g.gf.P("		_, _ = w.Write(respJson)")
 		g.gf.P("		return")
 		g.gf.P("	}")
-		g.gf.P("	ctx := r.Context()")
-		g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"writer\", w)")
-		g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"request\", r)")
-	case libraryFastHTTP:
-		g.gf.P("r.", method.httpMethodName, "( \"", method.uri.protoURI, "\", func(fastctx *", fasthttpPackage.Ident("RequestCtx"), ") { ")
-		g.gf.P("	fastctx.Response.Header.SetContentType(\"application/json\")")
-		g.gf.P("	input, err := build", g.getBuildMethodInputName(serviceName, method), "(fastctx)")
-		g.gf.P("	if err != nil {")
-		g.gf.P("		fastctx.SetStatusCode(", fasthttpPackage.Ident("StatusBadRequest"), ")")
-		// can't use protojson on inline structure
-		g.gf.P("		respJson, _ := ", jsonPackage.Ident("Marshal"), "(struct{ Error string }{Error: err.Error()})")
-		g.gf.P("		_, _ = fastctx.Write(respJson)")
-		g.gf.P("		return")
-		g.gf.P("	}")
-		// wrap fasthttp.RequestCtx further usage
-		// Call of ctx.Value will eventually call *fasthttp.RequestCtx.Value
-		g.gf.P("	ctx := context.WithValue(fastctx, \"request\", fastctx)")
-	case libraryGin:
-		g.gf.P("r.", method.httpMethodName, "( \"", method.uri.protoURI, "\", func(ginctx *", ginPackage.Ident("Context"), ") { ")
-		g.gf.P("	ginctx.Header(\"Content-Type\", \"application/json\")")
-		g.gf.P("	input, err := build", g.getBuildMethodInputName(serviceName, method), "(ginctx)")
-		g.gf.P("	if err != nil {")
-		g.gf.P("		ginctx.JSON(400, struct{ Error string }{Error: err.Error()})")
-		g.gf.P("		return")
-		g.gf.P("	}")
-		// wrap gin.Context further usage
-		g.gf.P("	ctx := context.WithValue(ginctx, \"request\", ginctx)")
-	}
-	g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"proto_service\", \""+serviceName+"\")")
-	g.gf.P("	ctx = ", contextPackage.Ident("WithValue"), "(ctx, \"proto_method\", \""+method.name+"\")")
-	g.gf.P("	handler := func(", g.serverInput, ") (", g.serverOutput, ") {")
-	g.gf.P("		return h.", method.name, "(ctx, input)")
-	g.gf.P("	}")
-	g.gf.P("	var resp any")
-	g.gf.P("	if middleware == nil {")
-	// errors should be dealt with in handler or middlewares
-	g.gf.P("		resp, _ = handler(ctx, input)")
-	g.gf.P("	} else {")
-	g.gf.P("		resp, _ = middleware(ctx, input, handler)")
-	g.gf.P("	}")
-	g.gf.P("	if resp == nil {")
-	g.gf.P("		return")
-	g.gf.P("	}")
-	if method.rule != nil && method.rule.ResponseBody != "" {
-		respField, ok := method.outputFields[method.rule.ResponseBody]
-		if !ok {
-			return fmt.Errorf("field %s not found in struct %s for method %s", method.rule.ResponseBody, method.outputMsgName.String(), method.name)
-		}
-		g.gf.P("if typedResp, ok := resp.(*", method.inputMsgName, "); ok {")
-		g.genMarshalServerResponse("typedResp." + respField.goName)
-		g.gf.P("} else {")
-		g.genMarshalServerResponse("resp")
-		g.gf.P("}")
 	} else {
-		g.genMarshalServerResponse("resp")
+		g.gf.P("	handler := func(", g.serverInput, ") (", g.serverOutput, ") {")
+		g.gf.P("		return h.", method.name, "(ctx, input)")
+		g.gf.P("	}")
+		g.gf.P("	var resp any")
+		g.gf.P("	if middleware == nil {")
+		// errors should be dealt with in handler or middlewares
+		g.gf.P("		resp, _ = handler(ctx, input)")
+		g.gf.P("	} else {")
+		g.gf.P("		resp, _ = middleware(ctx, input, handler)")
+		g.gf.P("	}")
+		g.gf.P("	if resp == nil {")
+		g.gf.P("		return")
+		g.gf.P("	}")
+
+		if method.rule != nil && method.rule.ResponseBody != "" {
+			respField, ok := method.outputFields[method.rule.ResponseBody]
+			if !ok {
+				return fmt.Errorf("field %s not found in struct %s for method %s", method.rule.ResponseBody, method.outputMsgName.String(), method.name)
+			}
+			g.gf.P("if typedResp, ok := resp.(*", method.inputMsgName, "); ok {")
+			g.genMarshalServerResponse("typedResp." + respField.goName)
+			g.gf.P("} else {")
+			g.genMarshalServerResponse("resp")
+			g.gf.P("}")
+
+		} else {
+			g.genMarshalServerResponse("resp")
+		}
 	}
 	g.gf.P("})")
 	g.gf.P()
@@ -156,7 +155,7 @@ func (g *generator) genMethodDeclaration(serviceName string, method methodParams
 		for _, binding := range method.rule.AdditionalBindings {
 			copiedMethod := method.Copy()
 			copiedMethod.httpMethodName, copiedMethod.uri.protoURI = getRuleMethodAndURI(binding)
-			copiedMethod.uri.parseURI(*g.cfg.Library)
+			copiedMethod.uri.parseURI()
 			copiedMethod.rule.AdditionalBindings = nil
 			if err = g.genMethodDeclaration(serviceName, copiedMethod); err != nil {
 				return err
@@ -167,28 +166,16 @@ func (g *generator) genMethodDeclaration(serviceName string, method methodParams
 }
 
 func (g *generator) genMarshalServerResponse(source string) {
-	if *g.cfg.Library == libraryGin && *g.cfg.Marshaller != marshallerProtoJSON {
-		g.gf.P("	ginctx.JSON(ginctx.Writer.Status(), ", source, ")")
-		return
-	}
-
 	// we can't assert interface if source is a field
 	if *g.cfg.Marshaller == marshallerProtoJSON && source == "resp" {
 		g.gf.P("	respJson, _ := ", g.marshaller.Ident("Marshal"), "(", source, ".(", protoPackage.Ident("Message"), "))")
 	} else {
 		g.gf.P("	respJson, _ := ", g.marshaller.Ident("Marshal"), "(", source, ")")
 	}
+	g.gf.P("	if respJson != nil {")
+	g.gf.P("		_, _ = w.Write(respJson)")
+	g.gf.P("	}")
 
-	switch *g.cfg.Library {
-	case libraryFastHTTP:
-		g.gf.P("	_, _ = fastctx.Write(respJson)")
-	case libraryNetHTTP:
-		g.gf.P("	if respJson != nil {")
-		g.gf.P("		_, _ = w.Write(respJson)")
-		g.gf.P("	}")
-	case libraryGin:
-		g.gf.P("	ginctx.Data(ginctx.Writer.Status(), \"application/json\", respJson)")
-	}
 }
 
 // getBuildMethodInputName creates name for function that builds method request
@@ -199,14 +186,7 @@ func (g *generator) getBuildMethodInputName(serviceName string, method methodPar
 
 // genBuildRequestMethod generates method that build request struct
 func (g *generator) genBuildRequestMethod(serviceName string, method methodParams) (err error) {
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("func build", g.getBuildMethodInputName(serviceName, method), "(r *", g.lib.Ident("Request"), ") (arg *", method.inputMsgName, ", err error) {")
-	case libraryFastHTTP:
-		g.gf.P("func build", g.getBuildMethodInputName(serviceName, method), "(ctx *", fasthttpPackage.Ident("RequestCtx"), ") (arg *", method.inputMsgName, ", err error) {")
-	case libraryGin:
-		g.gf.P("func build", g.getBuildMethodInputName(serviceName, method), "(ctx *", ginPackage.Ident("Context"), ") (arg *", method.inputMsgName, ", err error) {")
-	}
+	g.gf.P("func build", g.getBuildMethodInputName(serviceName, method), "(r *", g.lib.Ident("Request"), ") (arg *", method.inputMsgName, ", err error) {")
 	g.gf.P("	arg = &", method.inputMsgName, "{}")
 	if method.withFiles {
 		if err = g.genMultipartRequestServer(method); err != nil {
@@ -229,7 +209,7 @@ func (g *generator) genBuildRequestMethod(serviceName string, method methodParam
 		for _, binding := range method.rule.AdditionalBindings {
 			copiedMethod := method.Copy()
 			copiedMethod.httpMethodName, copiedMethod.uri.protoURI = getRuleMethodAndURI(binding)
-			copiedMethod.uri.parseURI(*g.cfg.Library)
+			copiedMethod.uri.parseURI()
 			if err = g.genMethodPathArguments(copiedMethod, allGeneratedFields); err != nil {
 				return err
 			}
@@ -263,18 +243,8 @@ func (g *generator) genServerMethodQueryParams(method methodParams) (err error) 
 	if len(method.inputFieldList) == 0 {
 		return nil
 	}
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("for key, values := range r.URL.Query() {")
-		g.gf.P("	for _, value := range values {")
-	case libraryFastHTTP:
-		g.gf.P("ctx.QueryArgs().VisitAll(func(keyB, valueB []byte) {")
-		g.gf.P("	var key = string(keyB)")
-		g.gf.P("	var value = string(valueB)")
-	case libraryGin:
-		g.gf.P("for key, values := range  ctx.Request.URL.Query() {")
-		g.gf.P("	for _, value := range values {")
-	}
+	g.gf.P("for key, values := range r.URL.Query() {")
+	g.gf.P("	for _, value := range values {")
 	g.gf.P("	switch key {")
 	for _, f := range method.inputFieldList {
 		if err = g.genQueryArgCheck(method.inputFields[f]); err != nil {
@@ -282,19 +252,10 @@ func (g *generator) genServerMethodQueryParams(method methodParams) (err error) 
 		}
 	}
 	g.gf.P("	default:")
-
-	switch *g.cfg.Library {
-	case libraryNetHTTP, libraryGin:
-		g.gf.P("		return nil, ", fmtPackage.Ident("Errorf"), "(\"unknown query parameter %s with value %s\", key, value)")
-		g.gf.P("	}")
-		g.gf.P("}")
-		g.gf.P("}")
-	case libraryFastHTTP:
-		g.gf.P("		err = ", fmtPackage.Ident("Errorf"), "(\"unknown query parameter %s with value %s\", key, value)")
-		g.gf.P("		return")
-		g.gf.P("	}")
-		g.gf.P("})")
-	}
+	g.gf.P("		return nil, ", fmtPackage.Ident("Errorf"), "(\"unknown query parameter %s with value '%s'\", key, value)")
+	g.gf.P("	}")
+	g.gf.P("}")
+	g.gf.P("}")
 	return nil
 }
 
@@ -303,17 +264,8 @@ func (g *generator) genBuildPathArgument(
 	f field,
 	uriArg methodURIArg,
 ) (err error) {
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	", f.goName, "Str := r.PathValue(\"", f.protoName, "\")")
-		g.gf.P("	if len(", f.goName, "Str) != 0 {")
-	case libraryFastHTTP:
-		g.gf.P("	", f.goName, "Str, ok := ctx.UserValue(\"", f.protoName, "\").(string)")
-		g.gf.P("	if ok && len(", f.goName, "Str) != 0 {")
-	case libraryGin:
-		g.gf.P("	", f.goName, "Str := ctx.Param(\"", f.protoName, "\")")
-		g.gf.P("	if len(", f.goName, "Str) != 0 {")
-	}
+	g.gf.P("	", f.goName, "Str := r.PathValue(\"", f.protoName, "\")")
+	g.gf.P("	if len(", f.goName, "Str) != 0 {")
 	if f.cardinality == protoreflect.Repeated {
 		if err = g.genRepeatedPathArgCheck(f); err != nil {
 			return err
@@ -332,19 +284,6 @@ func (g *generator) genBuildPathArgument(
 		}
 	default:
 		return fmt.Errorf("unsupported type %s for path variable", f.kind.String())
-	}
-	if *g.cfg.Library == libraryFastHTTP {
-		switch f.kind {
-		case protoreflect.StringKind:
-			g.gf.P("if arg.", f.goName, ", err = ", urlPackage.Ident("PathUnescape"), "(arg.", f.goName, "); err != nil {")
-			g.gf.P("	return nil, fmt.Errorf(\"PathUnescape failed for field ", f.protoName, ": %w\", err)")
-			g.gf.P("}")
-		case protoreflect.BytesKind:
-			g.gf.P("if ", f.goName, "Str, err = ", urlPackage.Ident("PathUnescape"), "(string(arg.", f.goName, ")); err != nil {")
-			g.gf.P("	return nil, fmt.Errorf(\"PathUnescape failed for field ", f.protoName, ": %w\", err)")
-			g.gf.P("}")
-			g.gf.P("arg.", f.goName, " = []byte(", f.goName, "Str)")
-		}
 	}
 	if uriArg.DestinationTpl != "" {
 		g.gf.P("arg.", f.goName, " = ", fmtPackage.Ident("Sprintf"), "(\"", uriArg.DestinationTpl, "\", arg.", f.goName, ")")
@@ -385,47 +324,30 @@ func (g *generator) genRepeatedPathArgCheck(f field) (err error) {
 		g.gf.P("err = ", fmtPackage.Ident("Errorf"), "(\"unsupported type repeated ", f.kind.String(), " for path argument ", f.goName, "\")")
 		g.gf.P("return nil, err")
 	}
-	if *g.cfg.Library == libraryFastHTTP {
-		switch f.kind {
-		case protoreflect.StringKind:
-			g.gf.P("for i, value := range arg.", f.goName, " {")
-			g.gf.P("	if arg.", f.goName, "[i], err = ", urlPackage.Ident("PathUnescape"), "(value); err != nil {")
-			g.gf.P("		return nil, fmt.Errorf(\"PathUnescape failed for field ", f.protoName, ": %w\", err)")
-			g.gf.P("	}")
-			g.gf.P("}")
-		case protoreflect.BytesKind:
-			g.gf.P("for i, value := range arg.", f.goName, " {")
-			g.gf.P("	if ", f.goName, "Str, err = ", urlPackage.Ident("PathUnescape"), "(string(value)); err != nil {")
-			g.gf.P("		return nil, fmt.Errorf(\"PathUnescape failed for field ", f.protoName, ": %w\", err)")
-			g.gf.P("	}")
-			g.gf.P("	arg.", f.goName, "[i] = []byte(", f.goName, "Str)")
-			g.gf.P("}")
-		}
-	}
 	return nil
 }
 
 // genChainServerMiddlewares generates server middleware chain functions
 func (g *generator) genChainServerMiddlewares() {
 	g.gf.P("func chainServerMiddlewares", g.filename, "(")
-	g.gf.P("	middlewares []func(", g.serverInput, ", handler func(", g.serverInput, ")(", g.serverOutput, ")) (", g.serverOutput, "),")
-	g.gf.P(") func(", g.serverInput, ", handler func(", g.serverInput, ")(", g.serverOutput, ")) (", g.serverOutput, ") {")
+	g.gf.P("	middlewares []MiddlewareFunc,")
+	g.gf.P(") func(", g.serverInput, ", handler HandlerFunc) (", g.serverOutput, ") {")
 	g.gf.P("	switch len(middlewares) {")
 	g.gf.P("	case 0:")
 	g.gf.P("		return nil")
 	g.gf.P("	case 1:")
 	g.gf.P("		return middlewares[0]")
 	g.gf.P("	default:")
-	g.gf.P("		return func(", g.serverInput, ", handler func(", g.serverInput, ")(", g.serverOutput, ")) (", g.serverOutput, ") {")
+	g.gf.P("		return func(", g.serverInput, ", handler HandlerFunc) (", g.serverOutput, ") {")
 	g.gf.P("			return middlewares[0](ctx, req, getChainServerMiddlewareHandler", g.filename, "(middlewares, 0, handler))")
 	g.gf.P("		}")
 	g.gf.P("	}")
 	g.gf.P("}")
 	g.gf.P()
 	g.gf.P("func getChainServerMiddlewareHandler", g.filename, "(")
-	g.gf.P("	middlewares []func(", g.serverInput, ", handler func(", g.serverInput, ")(", g.serverOutput, ")) (", g.serverOutput, "),")
+	g.gf.P("	middlewares []MiddlewareFunc,")
 	g.gf.P("	curr int,")
-	g.gf.P("	finalHandler func(", g.serverInput, ")(", g.serverOutput, "),")
+	g.gf.P("	finalHandler HandlerFunc,")
 	g.gf.P(") func(", g.serverInput, ") (", g.serverOutput, ") {")
 	g.gf.P("	if curr == len(middlewares)-1 {")
 	g.gf.P("		return finalHandler")
@@ -438,18 +360,12 @@ func (g *generator) genChainServerMiddlewares() {
 
 // genUnmarshalRequestStruct generates unmarshalling from []byte to struct for request
 func (g *generator) genUnmarshalRequestStruct(method methodParams) (err error) {
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	var body []byte")
-		g.gf.P("	if body, err = ", ioPackage.Ident("ReadAll"), "(r.Body); err != nil {")
-		g.gf.P("		return nil, err")
-		g.gf.P("	}")
-		g.gf.P("	_ = r.Body.Close()")
-		g.gf.P("	if len(body) > 0 { ")
-	case libraryFastHTTP:
-		g.gf.P("	var body = ctx.PostBody()")
-		g.gf.P("	if len(body) > 0 { ")
-	}
+	g.gf.P("	var body []byte")
+	g.gf.P("	if body, err = ", ioPackage.Ident("ReadAll"), "(r.Body); err != nil {")
+	g.gf.P("		return nil, err")
+	g.gf.P("	}")
+	g.gf.P("	_ = r.Body.Close()")
+	g.gf.P("	if len(body) > 0 { ")
 	destination := "arg"
 	if method.rule != nil && method.rule.Body != "" && method.rule.Body != "*" {
 		f, ok := method.inputFields[method.rule.Body]
@@ -459,12 +375,6 @@ func (g *generator) genUnmarshalRequestStruct(method methodParams) (err error) {
 		destination = "arg." + f.goName
 		g.gf.P("	", destination, " = &", f.structTypeIdent, "{}")
 	}
-	if *g.cfg.Library == libraryGin {
-		g.gf.P("	if err = ctx.ShouldBindBodyWithJSON(", destination, "); err != nil {")
-		g.gf.P("		return nil, err")
-		g.gf.P("	}")
-		return nil
-	}
 	g.gf.P("		if err = ", g.marshaller.Ident("Unmarshal"), "(body, ", destination, "); err != nil {")
 	g.gf.P("			return nil, err")
 	g.gf.P("		}")
@@ -473,31 +383,17 @@ func (g *generator) genUnmarshalRequestStruct(method methodParams) (err error) {
 }
 
 func (g *generator) genMultipartRequestServer(method methodParams) (err error) {
-	switch *g.cfg.Library {
-	case libraryFastHTTP, libraryGin:
-		g.gf.P("form, err := ctx.MultipartForm()")
-		g.gf.P("if err != nil {")
-		g.gf.P("	return nil, err")
-		g.gf.P("}")
-	case libraryNetHTTP:
-		g.gf.P("if err = r.ParseMultipartForm(32 << 20); err != nil {")
-		g.gf.P("	return nil, err")
-		g.gf.P("}")
-	}
+	g.gf.P("if err = r.ParseMultipartForm(32 << 20); err != nil {")
+	g.gf.P("	return nil, err")
+	g.gf.P("}")
+
 	for _, fieldName := range method.inputFieldList {
 		f := method.inputFields[fieldName]
 		if f.isFile {
 			g.genMultipartServerRequestField(f)
 			continue
 		}
-		switch *g.cfg.Library {
-		case libraryFastHTTP:
-			g.gf.P("if values, ok := form.Value[\"", f.protoName, "\"]; ok && len(values) > 0 {")
-		case libraryNetHTTP:
-			g.gf.P("if values := r.Form[\"", f.protoName, "\"]; len(values) > 0 {")
-		case libraryGin:
-			g.gf.P("if values := form.Value[\"", f.protoName, "\"]; len(values) > 0 {")
-		}
+		g.gf.P("if values := r.Form[\"", f.protoName, "\"]; len(values) > 0 {")
 		switch {
 		case f.cardinality == protoreflect.Repeated && f.kind == protoreflect.StringKind:
 			g.gf.P("	arg."+f.goName, " = append(arg."+f.goName, ", values...)")
@@ -518,43 +414,14 @@ func (g *generator) genMultipartRequestServer(method methodParams) (err error) {
 }
 
 func (g *generator) genMultipartServerRequestField(methodField field) {
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("f, fh, err := r.FormFile(\"", methodField.protoName, "\")")
-		g.gf.P("if err == nil && !", errorsPackage.Ident("Is"), "(err, ", httpPackage.Ident("ErrMissingFile"), ") {")
-		g.gf.P("	arg.", methodField.goName, " = &", methodField.fileStructIdent(), "{")
-		g.gf.P("		File:    make([]byte, fh.Size),")
-		g.gf.P("		Name:    fh.Filename,")
-		g.gf.P("		Headers: make(map[string]string, len(fh.Header)),")
-		g.gf.P("	}")
-		g.gf.P("	for key, value := range fh.Header {")
-	case libraryFastHTTP:
-		g.gf.P("if file, ok := form.File[\"", methodField.protoName, "\"]; ok && len(file) > 0 {")
-		g.gf.P("	var f ", multipartPackage.Ident("File"))
-		g.gf.P("	f, err = file[0].Open()")
-		g.gf.P("	if err != nil {")
-		g.gf.P("		return nil, fmt.Errorf(\"failed to open file: ", methodField.protoName, ": %w\", err)")
-		g.gf.P("	}")
-		g.gf.P("	arg.", methodField.goName, " = &", methodField.fileStructIdent(), "{")
-		g.gf.P("		File:    make([]byte, file[0].Size),")
-		g.gf.P("		Name:    file[0].Filename,")
-		g.gf.P("		Headers: make(map[string]string, len(file[0].Header)),")
-		g.gf.P("	}")
-		g.gf.P("	for key, value := range file[0].Header {")
-	case libraryGin:
-		g.gf.P("if file, ok := form.File[\"", methodField.protoName, "\"]; ok && len(file) > 0 {")
-		g.gf.P("	var f ", multipartPackage.Ident("File"))
-		g.gf.P("	f, err = file[0].Open()")
-		g.gf.P("	if err != nil {")
-		g.gf.P("		return nil, fmt.Errorf(\"failed to open file: ", methodField.protoName, ": %w\", err)")
-		g.gf.P("	}")
-		g.gf.P("	arg.", methodField.goName, " = &", methodField.fileStructIdent(), "{")
-		g.gf.P("		File:    make([]byte, file[0].Size),")
-		g.gf.P("		Name:    file[0].Filename,")
-		g.gf.P("		Headers: make(map[string]string, len(file[0].Header)),")
-		g.gf.P("	}")
-		g.gf.P("	for key, value := range file[0].Header {")
-	}
+	g.gf.P("f, fh, err := r.FormFile(\"", methodField.protoName, "\")")
+	g.gf.P("if err == nil && !", errorsPackage.Ident("Is"), "(err, ", httpPackage.Ident("ErrMissingFile"), ") {")
+	g.gf.P("	arg.", methodField.goName, " = &", methodField.fileStructIdent(), "{")
+	g.gf.P("		File:    make([]byte, fh.Size),")
+	g.gf.P("		Name:    fh.Filename,")
+	g.gf.P("		Headers: make(map[string]string, len(fh.Header)),")
+	g.gf.P("	}")
+	g.gf.P("	for key, value := range fh.Header {")
 	g.gf.P("		arg.", methodField.goName, ".Headers[key] = value[0]")
 	g.gf.P("	}")
 	g.gf.P("	_, err = f.Read(arg.", methodField.goName, ".File)")
@@ -571,7 +438,7 @@ func (g *generator) genQueryArgCheck(f field) (err error) {
 		g.gf.P("	case \"", f.protoName, "\":")
 	}
 
-	nakedReturn := *g.cfg.Library == libraryFastHTTP
+	nakedReturn := false
 	switch f.kind {
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Uint32Kind, protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind,
 		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind, protoreflect.Uint64Kind, protoreflect.Fixed64Kind,
@@ -588,12 +455,7 @@ func (g *generator) genQueryArgCheck(f field) (err error) {
 			return err
 		}
 	default:
-		if *g.cfg.Library == libraryFastHTTP {
-			g.gf.P("	err = ", fmtPackage.Ident("Errorf"), "(\"unsupported type "+f.kind.String()+" for query argument "+f.protoName+"\")")
-			g.gf.P("	return")
-		} else {
-			g.gf.P("	return nil, ", fmtPackage.Ident("Errorf"), "(\"unsupported type "+f.kind.String()+" for query argument "+f.protoName+"\")")
-		}
+		g.gf.P("	return nil, ", fmtPackage.Ident("Errorf"), "(\"unsupported type "+f.kind.String()+" for query argument "+f.protoName+"\")")
 	}
 
 	if f.kind == protoreflect.MessageKind && !f.isFile && f.cardinality != protoreflect.Repeated {
@@ -619,5 +481,74 @@ func (g *generator) genQueryArgCheck(f field) (err error) {
 			}
 		}
 	}
+	return nil
+}
+
+func (g *generator) genServerStream() (err error) {
+	g.gf.P()
+	g.gf.P("// httpServerStream implements grpc.ServerStreamingServer for HTTP.")
+	g.gf.P("type httpServerStream[Res any] struct {")
+	g.gf.P("	w ", httpPackage.Ident("ResponseWriter"))
+	g.gf.P("	r *", httpPackage.Ident("Request"))
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func NewHTTPServerStream[Res any](w ", httpPackage.Ident("ResponseWriter"), ", r *", httpPackage.Ident("Request"), ") ", grpcPackage.Ident("ServerStreamingServer"), "[Res] {")
+	g.gf.P(`	w.Header().Set("Content-Type", "application/x-ndjson")`)
+	g.gf.P(`	w.Header().Set("Transfer-Encoding", "chunked")`)
+	g.gf.P("	return &httpServerStream[Res]{w: w, r: r}")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) Send(m *Res) error {")
+	g.gf.P("	msg, ok := any(m).(proto.Message)")
+	g.gf.P("	if !ok {")
+	g.gf.P("		return ", grpcStatusPackage.Ident("Error"), "(", grpcCodesPackage.Ident("Internal"), ", ", fmtPackage.Ident("Sprintf"), "(\"message type %T does not implement proto.Message\", m))")
+	g.gf.P("	}")
+	g.gf.P("	b, err := ", g.marshaller.Ident("Marshal"), "(msg)")
+	g.gf.P("	if err != nil {")
+	g.gf.P("		return ", grpcStatusPackage.Ident("Error"), "(", grpcCodesPackage.Ident("Internal"), ", err.Error())")
+	g.gf.P("	}")
+	g.gf.P("	if _, err := s.w.Write(b); err != nil {")
+	g.gf.P("		return err")
+	g.gf.P("	}")
+	g.gf.P(`	if _, err := s.w.Write([]byte("\n")); err != nil {`)
+	g.gf.P("		return err")
+	g.gf.P("	}")
+	g.gf.P("	if flusher, ok := s.w.(", httpPackage.Ident("Flusher"), "); ok {")
+	g.gf.P("		flusher.Flush()")
+	g.gf.P("	}")
+	g.gf.P("	return nil")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) Context() ", contextPackage.Ident("Context"), " {")
+	g.gf.P("	return s.r.Context()")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) SetHeader(md ", grpcMetadataPackage.Ident("MD"), ") error {")
+	g.gf.P("	for k, v := range md {")
+	g.gf.P("		for _, val := range v {")
+	g.gf.P("			s.w.Header().Add(k, val)")
+	g.gf.P("		}")
+	g.gf.P("	}")
+	g.gf.P("	return nil")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) SendHeader(md ", grpcMetadataPackage.Ident("MD"), ") error {")
+	g.gf.P("	_ = s.SetHeader(md)")
+	g.gf.P("	s.w.WriteHeader(", httpPackage.Ident("StatusOK"), ")")
+	g.gf.P("	return nil")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) SetTrailer(md ", grpcMetadataPackage.Ident("MD"), ") {")
+	g.gf.P("	// Trailers are not easily supported in standard HTTP/1.1 streaming without trailers header.")
+	g.gf.P("	// For simplicity, we skip them or can add them as headers if SendHeader hasn't been called.")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) SendMsg(m any) error {")
+	g.gf.P("	return s.Send(m.(*Res))")
+	g.gf.P("}")
+	g.gf.P("")
+	g.gf.P("func (s *httpServerStream[Res]) RecvMsg(m any) error {")
+	g.gf.P("	return nil")
+	g.gf.P("}")
 	return nil
 }

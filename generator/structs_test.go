@@ -53,7 +53,7 @@ func Test_methodURI_parseURI(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.protoURI, func(t *testing.T) {
 			m := &methodURI{protoURI: tt.protoURI}
-			m.parseURI(libraryNetHTTP)
+			m.parseURI()
 			if m.protoURI != tt.expectedProtoURI {
 				t.Errorf("got protoURI = %v, want %v", m.protoURI, tt.expectedProtoURI)
 			}

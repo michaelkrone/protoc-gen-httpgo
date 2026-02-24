@@ -22,9 +22,7 @@ gen:				## generate example
 	@printf "\033[33mGenerating code...\033[0m\n"
 	@go generate ./example/proto/generate.go
 	@sed -i '1d' ./example/proto/*.httpgo.go # mark files as not generated for correct linter check
-	@sed -i '1d' ./example/proto/fasthttp/*.httpgo.go
-	@sed -i '1d' ./example/proto/nethttp/*.httpgo.go
-	@sed -i '1d' ./example/proto/gin/*.httpgo.go
+		@sed -i '1d' ./example/proto/nethttp/*.httpgo.go
 
 test:    			## run tests
 	@printf "\033[35mRunning tests...\033[0m\n"
@@ -60,10 +58,10 @@ installdeps:
              && chmod 755 ${GOWORKPATH}/bin/* \
              && rm -rf ./protoc
 	@export TMP_PATH=${GOWORKPATH}/src/github.com/googleapis \
-         && sudo mkdir ${INCLUDEPATH}/google/api -p \
+         && mkdir ${INCLUDEPATH}/google/api -p \
          && git clone https://github.com/googleapis/googleapis.git $TMP_PATH \
          && cd $TMP_PATH \
          && git checkout d9eae9f029427bd9ed4379d8e3cd46ca69f1a33f \
-         && sudo cp google/api/annotations.proto google/api/field_behavior.proto google/api/http.proto google/api/httpbody.proto \
+         && cp google/api/annotations.proto google/api/field_behavior.proto google/api/http.proto google/api/httpbody.proto \
          ${INCLUDEPATH}/google/api \
          && rm -rf $TMP_PATH

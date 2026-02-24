@@ -57,6 +57,7 @@ type (
 		inputFieldList []string // slice for constant sorting
 		hasBody        bool
 		withFiles      bool
+		streaming      bool
 	}
 
 	methodURI struct {
@@ -89,7 +90,6 @@ type (
 		Only               *string
 		AutoURI            *bool
 		BodylessMethodsStr *string
-		Library            *string
 	}
 )
 
@@ -114,19 +114,9 @@ func newGenerator(
 		gf:              gf,
 		bodylessMethods: bodylessMethods,
 	}
-	switch *cfg.Library {
-	case libraryNetHTTP:
-		g.lib = httpPackage
-	case libraryFastHTTP:
-		g.lib = fasthttpPackage
-	case libraryGin:
-		if *cfg.Only != onlyServer {
-			return g, errors.New("gin does not support client, use only=server parameter")
-		}
-		g.lib = ginPackage
-	default:
-		return g, errors.New("unsupported library type: " + *cfg.Library)
-	}
+
+	g.lib = httpPackage
+
 	switch *cfg.Marshaller {
 	case marshallerProtoJSON:
 		g.marshaller = protojsonPackage
@@ -167,10 +157,10 @@ func (g *generator) fillServices(file *protogen.File) {
 	for _, srv := range file.Services {
 		var methods []methodParams
 		for _, protoMethod := range srv.Methods {
-			// not supported
-			if protoMethod.Desc.IsStreamingClient() || protoMethod.Desc.IsStreamingServer() {
-				continue
-			}
+			// // not supported
+			// if protoMethod.Desc.IsStreamingClient() || protoMethod.Desc.IsStreamingServer() {
+			// 	continue
+			// }
 			method, err := g.getRuleMethodAndURI(protoMethod, srv.GoName)
 			if err != nil {
 				// if there is an error, we can't use the method. skip it for now
@@ -190,6 +180,7 @@ func fillMethod(method *methodParams, protoMethod *protogen.Method) {
 	method.name = protoMethod.GoName
 	method.inputMsgName = protoMethod.Input.GoIdent
 	method.outputMsgName = protoMethod.Output.GoIdent
+	method.streaming = protoMethod.Desc.IsStreamingClient() || protoMethod.Desc.IsStreamingServer()
 	var (
 		fields = make(map[string]field)
 	)
@@ -318,7 +309,7 @@ func (g *generator) getRuleMethodAndURI(protoMethod *protogen.Method, serviceNam
 
 	m.rule = httpRule
 	m.httpMethodName, m.uri.protoURI = getRuleMethodAndURI(httpRule)
-	m.uri.parseURI(*g.cfg.Library)
+	m.uri.parseURI()
 	m.hasBody = g.MethodShouldHasBody(m.httpMethodName)
 	return m, nil
 }
@@ -399,7 +390,7 @@ func isFileField(field *protogen.Field) bool {
 	return matchedFields == totalFields
 }
 
-func (m *methodURI) parseURI(library string) {
+func (m *methodURI) parseURI() {
 	m.args = make(map[string]methodURIArg)
 	var path string
 	for _, match := range uriParametersRegexp.FindAllStringSubmatch(m.protoURI, -1) {
@@ -412,30 +403,14 @@ func (m *methodURI) parseURI(library string) {
 			// and change uri to messages/{name}
 			if strings.Contains(pattern, "**") {
 				arg.DestinationTpl = strings.Replace(pattern, "**", "%s", 1)
-				switch library {
-				case libraryNetHTTP:
-					arg.PathTpl = "{" + fieldName + "...}"
-				case libraryFastHTTP:
-					arg.PathTpl = "{" + fieldName + ":*}"
-				case libraryGin:
-					arg.PathTpl = "*" + fieldName
-					// gin parameter value will have leading slash, so we have to remote it from template
-					arg.DestinationTpl = strings.Replace(arg.DestinationTpl, "/%s", "%s", 1)
-				}
+				arg.PathTpl = "{" + fieldName + "...}"
 				path = strings.Replace(pattern, "**", arg.PathTpl, 1)
 			} else {
-				switch library {
-				case libraryGin:
-					arg.PathTpl = ":" + fieldName
-				default:
-					arg.PathTpl = "{" + fieldName + "}"
-				}
+				arg.PathTpl = "{" + fieldName + "}"
 				arg.DestinationTpl = strings.Replace(pattern, "*", "%s", 1)
 				path = strings.Replace(pattern, "*", arg.PathTpl, 1)
 			}
 			m.protoURI = strings.Replace(m.protoURI, match[0], path, 1)
-		} else if library == libraryGin {
-			m.protoURI = strings.Replace(m.protoURI, match[0], ":"+fieldName, 1)
 		}
 		m.argList = append(m.argList, fieldName)
 		m.args[fieldName] = arg

@@ -71,13 +71,7 @@ func (g *generator) genClientMethod(
 		g.gf.P(comment)
 	}
 	g.gf.P("func (p * ", srvName, "HTTPGoClient) ", method.name, "(ctx ", contextPackage.Ident("Context"), ", request *", method.inputMsgName, ") (resp *", method.outputMsgName, ", err error) {")
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	req := &", g.lib.Ident("Request"), "{Header: make(", g.lib.Ident("Header"), ")}")
-	case libraryFastHTTP:
-		g.gf.P("	req := ", g.lib.Ident("AcquireRequest"), "()")
-		g.gf.P("	defer ", g.lib.Ident("ReleaseRequest"), "(req)")
-	}
+	g.gf.P("	req := &", g.lib.Ident("Request"), "{Header: make(", g.lib.Ident("Header"), ")}")
 	g.gf.P("	var queryArgs string")
 	switch {
 	case method.withFiles:
@@ -103,20 +97,16 @@ func (g *generator) genClientMethod(
 	if len(params) > 0 {
 		paramsURI = "," + strings.Join(params, ", ")
 	}
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	u, err := ", urlPackage.Ident("Parse"), "(", fmtPackage.Ident("Sprintf"), "(\"%s", requestURI, "%s\",p.host", paramsURI, ",queryArgs))")
-		g.gf.P("	if err != nil {")
-		g.gf.P("		return nil, err")
-		g.gf.P("	}")
-		// query parts won't escape without it
-		g.gf.P("	u.RawQuery = u.Query().Encode()")
-		g.gf.P("	req.URL = u")
-		g.gf.P("	req.Method = ", g.lib.Ident("Method"+titleString(method.httpMethodName)))
-	case libraryFastHTTP:
-		g.gf.P("	req.SetRequestURI(", fmtPackage.Ident("Sprintf"), "(\"%s", requestURI, "%s\",p.host", paramsURI, ",queryArgs))")
-		g.gf.P("	req.Header.SetMethod(\"", method.httpMethodName, "\")")
-	}
+
+	g.gf.P("	u, err := ", urlPackage.Ident("Parse"), "(", fmtPackage.Ident("Sprintf"), "(\"%s", requestURI, "%s\",p.host", paramsURI, ",queryArgs))")
+	g.gf.P("	if err != nil {")
+	g.gf.P("		return nil, err")
+	g.gf.P("	}")
+	// query parts won't escape without it
+	g.gf.P("	u.RawQuery = u.Query().Encode()")
+	g.gf.P("	req.URL = u")
+	g.gf.P("	req.Method = ", g.lib.Ident("Method"+titleString(method.httpMethodName)))
+
 	if method.withFiles {
 		g.gf.P("	req.Header.Set(\"Content-Type\", writer.FormDataContentType())")
 	} else {
@@ -127,15 +117,10 @@ func (g *generator) genClientMethod(
 	g.gf.P("	ctx = context.WithValue(ctx, \"proto_service\", \"", srvName, "\")")
 	g.gf.P("	ctx = context.WithValue(ctx, \"proto_method\", \"", method.name, "\")")
 	g.gf.P("	var handler = func(", g.clientInput, ") (", g.clientOutput, ") {")
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("		resp, err = p.cl.Do(req)")
-		g.gf.P("		return resp, err")
-	case libraryFastHTTP:
-		g.gf.P("		resp = &", g.lib.Ident("Response"), "{}")
-		g.gf.P("		err = p.cl.Do(req, resp)")
-		g.gf.P("		return resp, err")
-	}
+
+	g.gf.P("		resp, err = p.cl.Do(req)")
+	g.gf.P("		return resp, err")
+
 	g.gf.P("	}")
 	g.gf.P("	if p.middleware == nil {")
 	g.gf.P("		if reqResp, err = handler(ctx, req); err != nil {")
@@ -230,12 +215,7 @@ func (g *generator) genMarshalRequestStruct(method methodParams) error {
 	g.gf.P("	if err != nil {")
 	g.gf.P("		return nil, err")
 	g.gf.P("	}")
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	req.Body = ", ioPackage.Ident("NopCloser"), "(", bytesPackage.Ident("NewBuffer"), "(body))")
-	case libraryFastHTTP:
-		g.gf.P("	req.SetBody(body)")
-	}
+	g.gf.P("	req.Body = ", ioPackage.Ident("NopCloser"), "(", bytesPackage.Ident("NewBuffer"), "(body))")
 	return nil
 }
 
@@ -261,12 +241,7 @@ func (g *generator) genMultipartRequestClient(method methodParams) (err error) {
 	g.gf.P("if err = writer.Close(); err != nil {")
 	g.gf.P("	return nil, fmt.Errorf(\"failed to close writer: %w\", err)")
 	g.gf.P("}")
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("req.Body = ", ioPackage.Ident("NopCloser"), "(", bytesPackage.Ident("NewBuffer"), "(requestBody.Bytes()))")
-	case libraryFastHTTP:
-		g.gf.P("req.SetBody(requestBody.Bytes())")
-	}
+	g.gf.P("req.Body = ", ioPackage.Ident("NopCloser"), "(", bytesPackage.Ident("NewBuffer"), "(requestBody.Bytes()))")
 	return nil
 }
 
@@ -331,9 +306,6 @@ func (g *generator) genQueryRequestParameters(method methodParams) (err error) {
 		return err
 	}
 	g.gf.P("queryArgs = ", fmtPackage.Ident("Sprintf"), "(\"?\"+", stringsPackage.Ident("Join"), "(parameters, \"&\"),values...)")
-	if *g.cfg.Library == libraryFastHTTP {
-		g.gf.P("queryArgs = ", stringsPackage.Ident("ReplaceAll"), "(queryArgs, \"[]\", \"%5B%5D\")")
-	}
 	return nil
 }
 
@@ -431,16 +403,11 @@ func (g *generator) genQueryRepeatedParameters(method methodParams) (err error) 
 // genUnmarshalResponseStruct generates unmarshalling from []byte to struct for response
 func (g *generator) genUnmarshalResponseStruct(method methodParams) error {
 	respStruct := "resp"
-	switch *g.cfg.Library {
-	case libraryNetHTTP:
-		g.gf.P("	var respBody []byte")
-		g.gf.P("	if respBody, err = ", ioPackage.Ident("ReadAll"), "(reqResp.Body); err != nil {")
-		g.gf.P("		return nil, err")
-		g.gf.P("	}")
-		g.gf.P("	_ = reqResp.Body.Close()")
-	case libraryFastHTTP:
-		g.gf.P("	var respBody = reqResp.Body()")
-	}
+	g.gf.P("	var respBody []byte")
+	g.gf.P("	if respBody, err = ", ioPackage.Ident("ReadAll"), "(reqResp.Body); err != nil {")
+	g.gf.P("		return nil, err")
+	g.gf.P("	}")
+	g.gf.P("	_ = reqResp.Body.Close()")
 
 	var reference = ""
 	if method.rule != nil && method.rule.ResponseBody != "" {

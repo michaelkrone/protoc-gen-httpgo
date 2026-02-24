@@ -12,13 +12,13 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	proto "github.com/michaelkrone/protoc-gen-httpgo/example/proto/common"
-	protofasthttp "github.com/michaelkrone/protoc-gen-httpgo/example/proto/fasthttp"
+	protohttp "github.com/michaelkrone/protoc-gen-httpgo/example/proto/nethttp"
 )
 
 type Handler struct {
 }
 
-var _ protofasthttp.ServiceNameHTTPGoService = &Handler{}
+var _ protohttp.ServiceNameHTTPGoService = &Handler{}
 
 func (h *Handler) RPCName(_ context.Context, request *proto.InputMsgName) (*proto.OutputMsgName, error) {
 	p := &proto.OutputMsgName{

@@ -15,9 +15,11 @@ var (
 	urlPackage       = protogen.GoImportPath("net/url")
 	multipartPackage = protogen.GoImportPath("mime/multipart")
 
-	fasthttpPackage  = protogen.GoImportPath("github.com/valyala/fasthttp")
-	routerPackage    = protogen.GoImportPath("github.com/fasthttp/router")
 	protojsonPackage = protogen.GoImportPath("google.golang.org/protobuf/encoding/protojson")
 	protoPackage     = protogen.GoImportPath("google.golang.org/protobuf/proto")
-	ginPackage       = protogen.GoImportPath("github.com/gin-gonic/gin")
+
+	grpcPackage         = protogen.GoImportPath("google.golang.org/grpc")
+	grpcCodesPackage    = protogen.GoImportPath("google.golang.org/grpc/codes")
+	grpcMetadataPackage = protogen.GoImportPath("google.golang.org/grpc/metadata")
+	grpcStatusPackage   = protogen.GoImportPath("google.golang.org/grpc/status")
 )
